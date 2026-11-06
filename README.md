@@ -18,6 +18,8 @@ Add this to the `<head>` of any HTML page:
 
 Load it in the `<head>`, without `defer` or `async`, so the parts that haven't been built are hidden before the first paint. Loaded later, it still works, but visitors may see the page for a moment before it starts.
 
+`@1` follows the latest 1.x release, but browsers may keep a cached copy for up to 7 days. To have an update reach every visitor right away, pin an exact version (for example `@1.1.0`) and change it when you upgrade.
+
 Prefer to self-host? Download [`buildcursors.js`](buildcursors.js) and point the `src` at your copy.
 
 ## How it works
