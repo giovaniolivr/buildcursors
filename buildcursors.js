@@ -1,5 +1,5 @@
 /*!
- * buildcursors v1.0.0
+ * buildcursors v1.1.0
  * Coloured cursor "agents" build your page as it scrolls into view.
  * MIT License (c) 2026 Giovani Oliveira
  * https://github.com/giovaniolivr/buildcursors
@@ -7,7 +7,7 @@
 (function (global) {
   "use strict";
 
-  const VERSION = "1.0.0";
+  const VERSION = "1.1.0";
   const doc = document;
   const root = doc.documentElement;
 
@@ -234,16 +234,17 @@ html.bc-on img.bc-done { transition: opacity 300ms ease-out; }
     const ease = (p) => (p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2);
     const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-    function tween(ms, fn) {
+    // Resolves true when it ran to the end, false when stopped or when abort() said so.
+    function tween(ms, fn, abort) {
       return new Promise((resolve) => {
         const d = ms / speed();
         let t0 = null;
         function frame(now) {
-          if (S.stopped) return resolve();
+          if (S.stopped || (abort && abort())) return resolve(false);
           if (t0 === null) t0 = now;
           const p = Math.min(1, (now - t0) / d);
           fn(p);
-          p < 1 ? requestAnimationFrame(frame) : resolve();
+          p < 1 ? requestAnimationFrame(frame) : resolve(true);
         }
         requestAnimationFrame(frame);
       });
@@ -279,7 +280,7 @@ html.bc-on img.bc-done { transition: opacity 300ms ease-out; }
       const a = Object.assign({}, def, {
         i, el, guides, box, dim, caret,
         x: innerWidth + 40, y: 80 + Math.random() * Math.max(1, innerHeight - 160),
-        away: true, idleSince: 0,
+        away: true,
       });
       render(a);
       return a;
@@ -290,12 +291,12 @@ html.bc-on img.bc-done { transition: opacity 300ms ease-out; }
     }
 
     // Curved flight towards a (possibly moving, e.g. while scrolling) point.
-    async function move(a, getPt, ms, onFrame) {
+    function move(a, getPt, ms, onFrame, abort) {
       const sx = a.x, sy = a.y;
       const t = getPt();
       const dist = Math.hypot(t.x - sx, t.y - sy);
       const bend = (Math.random() - 0.5) * 0.6;
-      await tween(ms || clamp(dist * 0.9, 250, 900), (p) => {
+      return tween(ms || clamp(dist * 0.9, 250, 900), (p) => {
         const e = ease(p), pt = getPt();
         const cx = (sx + pt.x) / 2 - (pt.y - sy) * bend;
         const cy = (sy + pt.y) / 2 + (pt.x - sx) * bend;
@@ -303,7 +304,7 @@ html.bc-on img.bc-done { transition: opacity 300ms ease-out; }
         a.y = (1 - e) * (1 - e) * sy + 2 * (1 - e) * e * cy + e * e * pt.y;
         render(a);
         if (onFrame) onFrame();
-      });
+      }, abort);
     }
 
     function setGuides(a, l, t, w, h, on) {
@@ -383,14 +384,15 @@ html.bc-on img.bc-done { transition: opacity 300ms ease-out; }
       });
       ripple(a);
       finish(el);
-      await tween(380, (p) => {
-        const r = paint();
-        a.box.style.opacity = 1 - p;
-        a.x = r.left + w; a.y = r.top + h;
-        render(a);
-      });
+      // The box fades out on its own while the agent moves straight on to its next job.
+      const ghost = a.box.cloneNode(true);
+      layer.appendChild(ghost);
       a.box.style.opacity = 0;
       setGuides(a, 0, 0, 0, 0, false);
+      tween(380, (p) => {
+        const r = R();
+        Object.assign(ghost.style, { left: r.left + "px", top: r.top + "px", opacity: 1 - p });
+      }).then(() => ghost.remove());
       handed.forEach((t) => io.observe(t)); // queued once on screen
     }
 
@@ -431,7 +433,6 @@ html.bc-on img.bc-done { transition: opacity 300ms ease-out; }
       finish(img);
       clone.style.opacity = 0;
       setTimeout(() => clone.remove(), 400);
-      await wait(120);
     }
 
     // The text's real line boxes (relative to el), so empty space is never "typed".
@@ -557,12 +558,23 @@ html.bc-on img.bc-done { transition: opacity 300ms ease-out; }
     // Off-screen spot just past the right edge, at the agent's current height.
     const offRight = (a) => ({ x: innerWidth + 40, y: clamp(a.y, 40, innerHeight - 40) });
 
-    // Nothing to do on screen: retreat off the right edge instead of hovering over the content.
-    async function hide(a) {
-      a.away = true;
+    // Agents gliding off-screen right now, in crew order. When work shows up, the first
+    // N of them turn around mid-flight (N = jobs waiting); the rest keep going.
+    const leaving = [];
+
+    // Nothing to do on screen: glide off the right edge straight away (never stand still over
+    // the content), unless work appears on the way.
+    async function retreat(a, force) {
+      leaving.push(a);
+      leaving.sort((x, y) => x.i - y.i);
       const pt = offRight(a);
-      await move(a, () => pt, 500);
-      a.el.style.opacity = 0;
+      const turnBack = force ? null : () => S.queue.length > leaving.indexOf(a);
+      const done = await move(a, () => pt, 700, null, turnBack);
+      leaving.splice(leaving.indexOf(a), 1);
+      if (done) {
+        a.away = true;
+        a.el.style.opacity = 0;
+      }
     }
 
     // Work arrived: reappear just off-screen and fly in from there.
@@ -586,14 +598,10 @@ html.bc-on img.bc-done { transition: opacity 300ms ease-out; }
         const task = takeTask(a);
         if (!task) {
           if (!S.busy) stamp(); // first screen built → count it as seen
-          // Short grace period: a panel that just landed hands its text over a moment later.
-          const now = performance.now();
-          if (!a.idleSince) a.idleSince = now;
-          if (!a.away && now - a.idleSince > 900) await hide(a);
-          else await wait(200);
+          if (!a.away) await retreat(a);
+          else await wait(150); // off-screen, invisible: just check again soon
           continue;
         }
-        a.idleSince = 0;
         if (a.away) show(a);
         task.el._bcTaken = true;
         S.busy++;
@@ -673,7 +681,7 @@ html.bc-on img.bc-done { transition: opacity 300ms ease-out; }
       if (S.stopped) return;
       stamp();
       if (cfg.finale) await finale();
-      else await Promise.all(agents.filter((a) => !a.away).map(hide));
+      else await Promise.all(agents.filter((a) => !a.away).map((a) => retreat(a, true)));
       if (!S.stopped) teardown();
     });
 

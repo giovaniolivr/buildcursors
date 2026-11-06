@@ -27,7 +27,7 @@ Your real page is rendered as usual. While the intro runs, parts that haven't be
 | **Media** | Fly off-screen, grab the image and carry it into its frame |
 | **QA** | Help wherever there's a backlog |
 
-Each agent prefers its own kind of work and helps with the rest when it's free. Agents with nothing to do step off the right edge and come back when there's work. When the whole page is built, the crew lines up on the right, gives a little hop and leaves.
+Each agent prefers its own kind of work and helps with the rest when it's free. Cursors never stand still over your content: an agent with nothing to do glides off the right edge straight away, and turns around mid-flight when new work appears. When the whole page is built, the crew lines up on the right, gives a little hop and leaves.
 
 When a panel is built, the text inside it is handed to the typing agents and its images to Media, so they arrive one by one.
 
@@ -102,7 +102,7 @@ Or define `window.buildcursorsConfig` **before** the script. You need this form 
 buildcursors.replay();   // clear the cooldown and reload with ?build=1
 buildcursors.skip();     // build everything now
 buildcursors.running;    // true while the intro is playing
-buildcursors.version;    // "1.0.0"
+buildcursors.version;    // "1.1.0"
 ```
 
 ## Polite by default
