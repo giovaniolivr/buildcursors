@@ -4,6 +4,10 @@
 
 **[Live demo →](https://giovaniolivr.github.io/buildcursors/)** · Also running on [giovaniolivr.github.io](https://giovaniolivr.github.io/)
 
+<p align="center">
+  <img src="demo/buildcursors.gif" width="600" alt="Coloured cursors building a web page: drawing selection boxes around panels, typing text line by line and lining up on the right when done">
+</p>
+
 ## Quick start
 
 Add this to the `<head>` of any HTML page:
